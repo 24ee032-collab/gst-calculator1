@@ -16,7 +16,7 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# Professional Dark Theme with Bright Accents
+# Professional Dark Theme with Bright, Visible Fonts
 st.markdown("""
 <style>
     /* Dark Background with Gradient */
@@ -24,13 +24,14 @@ st.markdown("""
         background: linear-gradient(135deg, #0a0e27 0%, #1a1f3a 50%, #0f1428 100%);
     }
     
-    /* Headers */
+    /* Headers - Bright Gold */
     h1, h2, h3, .stMarkdown h1, .stMarkdown h2, .stMarkdown h3 {
         color: #FFD700 !important;
         font-weight: 700 !important;
+        text-shadow: 1px 1px 2px rgba(0,0,0,0.5);
     }
     
-    /* Main Title */
+    /* Main Title - Gradient with Bright Colors */
     .main-title {
         text-align: center;
         font-size: 58px;
@@ -39,6 +40,7 @@ st.markdown("""
         -webkit-background-clip: text;
         -webkit-text-fill-color: transparent;
         margin-bottom: 20px;
+        text-shadow: none;
     }
     
     /* AI Card - Special Style */
@@ -119,7 +121,14 @@ st.markdown("""
         -webkit-text-fill-color: transparent;
     }
     
-    /* Chat Messages */
+    .metric-label {
+        color: #E0E0E0 !important;
+        font-size: 16px;
+        margin-top: 5px;
+        font-weight: 500;
+    }
+    
+    /* Chat Messages - Bright and Visible */
     .user-message {
         background: #2a2f4a;
         border-radius: 15px;
@@ -127,7 +136,9 @@ st.markdown("""
         margin: 8px 0;
         text-align: right;
         border-right: 4px solid #FFD700;
-        color: white;
+        color: #FFFFFF !important;
+        font-size: 15px;
+        font-weight: 500;
     }
     
     .bot-message {
@@ -136,18 +147,27 @@ st.markdown("""
         padding: 12px 18px;
         margin: 8px 0;
         border-left: 4px solid #FFD700;
-        color: #FFD700;
+        color: #FFD700 !important;
+        font-size: 15px;
+        font-weight: 500;
     }
     
     /* Input Fields */
     .stTextInput > div > div > input, 
     .stNumberInput > div > div > input,
-    .stSelectbox > div > div {
+    .stSelectbox > div > div,
+    .stTextArea > div > div > textarea {
         background: #1e2340;
-        color: white;
+        color: #FFFFFF !important;
         border: 2px solid #FFD700;
         border-radius: 12px;
         padding: 10px;
+        font-size: 15px;
+    }
+    
+    .stTextInput label, .stNumberInput label, .stSelectbox label {
+        color: #FFD700 !important;
+        font-weight: 600;
     }
     
     /* Tabs */
@@ -163,12 +183,105 @@ st.markdown("""
         border-radius: 12px;
         padding: 10px 25px;
         font-weight: 600;
-        color: white;
+        color: #FFFFFF !important;
+        font-size: 16px;
     }
     
     .stTabs [aria-selected="true"] {
         background: linear-gradient(135deg, #FFD700, #FFA500);
-        color: #1a1f3a;
+        color: #1a1f3a !important;
+        font-weight: 700;
+    }
+    
+    /* Dataframes and Tables */
+    .stDataFrame, .dataframe {
+        color: #FFFFFF !important;
+        background: #1e2340 !important;
+    }
+    
+    .stDataFrame th, .dataframe th {
+        color: #FFD700 !important;
+        background: #2a2f4a !important;
+        font-weight: bold;
+    }
+    
+    .stDataFrame td, .dataframe td {
+        color: #E0E0E0 !important;
+    }
+    
+    /* Expander */
+    .streamlit-expanderHeader {
+        color: #FFD700 !important;
+        font-weight: 600;
+    }
+    
+    /* Info, Success, Warning, Error boxes */
+    .stAlert {
+        font-weight: 500;
+    }
+    
+    .stAlert div {
+        color: #1a1f3a !important;
+    }
+    
+    /* Markdown text */
+    .stMarkdown, .stMarkdown p, .stMarkdown li {
+        color: #E0E0E0 !important;
+        font-size: 15px;
+    }
+    
+    /* Sidebar text */
+    .css-1d391kg, .sidebar-content {
+        color: #FFFFFF !important;
+    }
+    
+    /* Sidebar markdown */
+    .sidebar .stMarkdown, .sidebar .stMarkdown p {
+        color: #E0E0E0 !important;
+    }
+    
+    /* Metric text */
+    .stMetric label, .stMetric .stMetricValue {
+        color: #FFD700 !important;
+    }
+    
+    /* Caption text */
+    .stCaption, caption {
+        color: #B0B0B0 !important;
+    }
+    
+    /* Code blocks */
+    code {
+        color: #FFD700 !important;
+        background: #2a2f4a !important;
+    }
+    
+    /* Links */
+    a {
+        color: #FFA500 !important;
+        text-decoration: none;
+    }
+    
+    a:hover {
+        color: #FFD700 !important;
+        text-decoration: underline;
+    }
+    
+    /* Selectbox options */
+    .stSelectbox div[data-baseweb="select"] div {
+        background: #1e2340;
+        color: white;
+    }
+    
+    /* Slider */
+    .stSlider label {
+        color: #FFD700 !important;
+    }
+    
+    /* Download button text */
+    .stDownloadButton button {
+        color: #1a1f3a !important;
+        font-weight: bold;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -601,7 +714,7 @@ def direct_calculator():
         
         st.markdown('<div class="result-box">', unsafe_allow_html=True)
         st.markdown(f'<div class="amount-large">₹{total_amount:,.2f}</div>', unsafe_allow_html=True)
-        st.markdown(f'<p style="font-size: 18px;">GST Amount: ₹{gst_amount:,.2f} ({gst_rate}%)</p>', unsafe_allow_html=True)
+        st.markdown(f'<p style="font-size: 18px; color: white;">GST Amount: ₹{gst_amount:,.2f} ({gst_rate}%)</p>', unsafe_allow_html=True)
         st.markdown('</div>', unsafe_allow_html=True)
         
         if st.button("➕ Add to Cart", use_container_width=True):
@@ -623,7 +736,7 @@ def direct_calculator():
 # Login
 def login():
     st.markdown('<div class="main-title">🚀 Ultimate GST Suite</div>', unsafe_allow_html=True)
-    st.markdown("<p style='text-align:center; color:#FFD700;'>AI-Powered | 500+ Products | Smart Analytics</p>", unsafe_allow_html=True)
+    st.markdown("<p style='text-align:center; color:#FFD700; font-size: 18px;'>AI-Powered | 500+ Products | Smart Analytics</p>", unsafe_allow_html=True)
     
     col1, col2, col3 = st.columns([1, 2, 1])
     with col2:
@@ -748,7 +861,7 @@ def main():
                         with col2:
                             st.write(f"₹{p[3]:,.2f}")
                         with col3:
-                            st.markdown(f'<span style="background:#FFD700; color:#1a1f3a; padding:4px 12px; border-radius:20px;">{p[4]}% GST</span>', unsafe_allow_html=True)
+                            st.markdown(f'<span style="background:#FFD700; color:#1a1f3a; padding:4px 12px; border-radius:20px; font-weight:bold;">{p[4]}% GST</span>', unsafe_allow_html=True)
                         with col4:
                             qty = st.number_input("Qty", 1, min(10, p[5]), 1, key=f"qty_{p[0]}", label_visibility="collapsed")
                         with col5:
@@ -876,7 +989,7 @@ def main():
             
             if not daily_sales.empty:
                 fig = px.line(daily_sales, x='date', y='grand_total', title="Sales Trend")
-                fig.update_layout(template="plotly_dark")
+                fig.update_layout(template="plotly_dark", title_font_color="#FFD700", font_color="#FFFFFF")
                 st.plotly_chart(fig, use_container_width=True)
             
             # Recent transactions
