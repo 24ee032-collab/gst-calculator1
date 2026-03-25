@@ -128,7 +128,7 @@ st.markdown("""
         font-weight: 500;
     }
     
-    /* Chat Messages - Bright and Visible */
+    /* Chat Messages */
     .user-message {
         background: #2a2f4a;
         border-radius: 15px;
@@ -155,14 +155,12 @@ st.markdown("""
     /* Input Fields */
     .stTextInput > div > div > input, 
     .stNumberInput > div > div > input,
-    .stSelectbox > div > div,
-    .stTextArea > div > div > textarea {
+    .stSelectbox > div > div {
         background: #1e2340;
         color: #FFFFFF !important;
         border: 2px solid #FFD700;
         border-radius: 12px;
         padding: 10px;
-        font-size: 15px;
     }
     
     .stTextInput label, .stNumberInput label, .stSelectbox label {
@@ -193,7 +191,7 @@ st.markdown("""
         font-weight: 700;
     }
     
-    /* Dataframes and Tables */
+    /* Dataframes */
     .stDataFrame, .dataframe {
         color: #FFFFFF !important;
         background: #1e2340 !important;
@@ -202,86 +200,6 @@ st.markdown("""
     .stDataFrame th, .dataframe th {
         color: #FFD700 !important;
         background: #2a2f4a !important;
-        font-weight: bold;
-    }
-    
-    .stDataFrame td, .dataframe td {
-        color: #E0E0E0 !important;
-    }
-    
-    /* Expander */
-    .streamlit-expanderHeader {
-        color: #FFD700 !important;
-        font-weight: 600;
-    }
-    
-    /* Info, Success, Warning, Error boxes */
-    .stAlert {
-        font-weight: 500;
-    }
-    
-    .stAlert div {
-        color: #1a1f3a !important;
-    }
-    
-    /* Markdown text */
-    .stMarkdown, .stMarkdown p, .stMarkdown li {
-        color: #E0E0E0 !important;
-        font-size: 15px;
-    }
-    
-    /* Sidebar text */
-    .css-1d391kg, .sidebar-content {
-        color: #FFFFFF !important;
-    }
-    
-    /* Sidebar markdown */
-    .sidebar .stMarkdown, .sidebar .stMarkdown p {
-        color: #E0E0E0 !important;
-    }
-    
-    /* Metric text */
-    .stMetric label, .stMetric .stMetricValue {
-        color: #FFD700 !important;
-    }
-    
-    /* Caption text */
-    .stCaption, caption {
-        color: #B0B0B0 !important;
-    }
-    
-    /* Code blocks */
-    code {
-        color: #FFD700 !important;
-        background: #2a2f4a !important;
-    }
-    
-    /* Links */
-    a {
-        color: #FFA500 !important;
-        text-decoration: none;
-    }
-    
-    a:hover {
-        color: #FFD700 !important;
-        text-decoration: underline;
-    }
-    
-    /* Selectbox options */
-    .stSelectbox div[data-baseweb="select"] div {
-        background: #1e2340;
-        color: white;
-    }
-    
-    /* Slider */
-    .stSlider label {
-        color: #FFD700 !important;
-    }
-    
-    /* Download button text */
-    .stDownloadButton button {
-        color: #1a1f3a !important;
-        font-weight: bold;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -374,11 +292,42 @@ def init_db():
     conn.commit()
     conn.close()
 
-# Calculate GST
-def calc_gst(amount, rate):
+# GST Calculation Functions
+def calc_gst_exclusive(amount, rate):
+    """Exclusive GST - GST added on top of amount"""
     gst = amount * rate / 100
     total = amount + gst
     return round(gst, 2), round(total, 2)
+
+def calc_gst_inclusive(amount, rate):
+    """Inclusive GST - GST included in the amount"""
+    gst = amount * rate / (100 + rate)
+    base = amount - gst
+    return round(gst, 2), round(base, 2)
+
+def calc_gst_both(amount, rate, calc_type):
+    """Calculate GST based on type"""
+    if calc_type == "Exclusive (GST added)":
+        gst, total = calc_gst_exclusive(amount, rate)
+        return {
+            'type': 'Exclusive',
+            'original': amount,
+            'gst_rate': rate,
+            'gst_amount': gst,
+            'total': total,
+            'formula': f"GST = {amount} × {rate}% = {gst}"
+        }
+    else:
+        gst, base = calc_gst_inclusive(amount, rate)
+        return {
+            'type': 'Inclusive',
+            'original': amount,
+            'gst_rate': rate,
+            'gst_amount': gst,
+            'base_amount': base,
+            'total': amount,
+            'formula': f"Base = {amount} - GST = {base}, GST = {gst}"
+        }
 
 # Search products
 def search_products(query):
@@ -394,7 +343,6 @@ def generate_pdf(invoice_no, items, subtotal, total_gst, grand_total, username):
     pdf = FPDF()
     pdf.add_page()
     
-    # Header
     pdf.set_fill_color(255, 215, 0)
     pdf.rect(0, 0, 210, 45, 'F')
     pdf.set_text_color(0, 0, 0)
@@ -413,21 +361,20 @@ def generate_pdf(invoice_no, items, subtotal, total_gst, grand_total, username):
     
     pdf.ln(8)
     
-    # Table header
     pdf.set_font("Arial", "B", 9)
     pdf.set_fill_color(255, 215, 0)
-    pdf.cell(80, 10, "Product", 1, 0, 'C', True)
-    pdf.cell(30, 10, "Amount (INR)", 1, 0, 'C', True)
-    pdf.cell(25, 10, "GST%", 1, 0, 'C', True)
+    pdf.cell(70, 10, "Product", 1, 0, 'C', True)
+    pdf.cell(25, 10, "Amount", 1, 0, 'C', True)
+    pdf.cell(20, 10, "GST%", 1, 0, 'C', True)
     pdf.cell(25, 10, "GST Amt", 1, 0, 'C', True)
     pdf.cell(30, 10, "Total", 1, 1, 'C', True)
     
     pdf.set_font("Arial", "", 8)
     for item in items:
         name = item['name'][:35].encode('ascii', 'ignore').decode('ascii')
-        pdf.cell(80, 8, name, 1)
-        pdf.cell(30, 8, f"{item['amount']:.2f}", 1, 0, 'R')
-        pdf.cell(25, 8, f"{item['gst_rate']}", 1, 0, 'C')
+        pdf.cell(70, 8, name, 1)
+        pdf.cell(25, 8, f"{item['amount']:.2f}", 1, 0, 'R')
+        pdf.cell(20, 8, f"{item['gst_rate']}", 1, 0, 'C')
         pdf.cell(25, 8, f"{item['gst']:.2f}", 1, 0, 'R')
         pdf.cell(30, 8, f"{item['total']:.2f}", 1, 1, 'R')
     
@@ -442,301 +389,124 @@ def generate_pdf(invoice_no, items, subtotal, total_gst, grand_total, username):
     pdf.output(filename)
     return filename
 
-# AI Assistant Function - COMPLETELY FIXED
+# AI Assistant Function
 def ai_assistant():
     st.markdown('<div class="ai-card">', unsafe_allow_html=True)
     st.subheader("🤖 AI GST Assistant")
-    st.markdown("Ask me anything about GST, calculations, or products!")
     
-    # Initialize chat history in session state
     if 'chat_history' not in st.session_state:
         st.session_state.chat_history = [
-            {'role': 'assistant', 'content': "Hello! I'm your AI GST Assistant. I can help you with:\n\n• GST rates for different products\n• GST calculation formulas\n• How to generate invoices\n• Product information\n• GST return filing\n\nWhat would you like to know?"}
+            {'role': 'assistant', 'content': "Hello! I'm your AI GST Assistant. I can help you with:\n\n• GST rates\n• Exclusive vs Inclusive GST\n• Calculation formulas\n• Invoice generation\n\nWhat would you like to know?"}
         ]
     
-    # Display chat history
-    chat_container = st.container()
-    with chat_container:
-        for msg in st.session_state.chat_history:
-            if msg['role'] == 'user':
-                st.markdown(f'<div class="user-message">👤 You: {msg["content"]}</div>', unsafe_allow_html=True)
-            else:
-                st.markdown(f'<div class="bot-message">🤖 AI: {msg["content"]}</div>', unsafe_allow_html=True)
+    for msg in st.session_state.chat_history:
+        if msg['role'] == 'user':
+            st.markdown(f'<div class="user-message">👤 You: {msg["content"]}</div>', unsafe_allow_html=True)
+        else:
+            st.markdown(f'<div class="bot-message">🤖 AI: {msg["content"]}</div>', unsafe_allow_html=True)
     
-    # Chat input
-    col1, col2 = st.columns([4, 1])
+    question = st.text_input("", placeholder="Ask a question...")
     
-    with col1:
-        question = st.text_input("", placeholder="Type your question here...", key="ai_question", label_visibility="collapsed")
-    
-    with col2:
-        send_button = st.button("📤 Send", use_container_width=True)
-    
-    # Quick question buttons
-    st.markdown("### Quick Questions:")
-    col1, col2, col3, col4 = st.columns(4)
-    
-    with col1:
-        if st.button("💰 GST Rates", use_container_width=True):
-            question = "What are the GST rates for different products?"
-            send_button = True
-    
-    with col2:
-        if st.button("🧮 Calculate GST", use_container_width=True):
-            question = "How to calculate GST?"
-            send_button = True
-    
-    with col3:
-        if st.button("📄 Generate Invoice", use_container_width=True):
-            question = "How do I generate an invoice?"
-            send_button = True
-    
-    with col4:
-        if st.button("📊 GST Returns", use_container_width=True):
-            question = "How to file GST returns?"
-            send_button = True
-    
-    # Process question
-    if send_button and question:
-        # Add user message
+    if st.button("Send", use_container_width=True) and question:
         st.session_state.chat_history.append({'role': 'user', 'content': question})
         
-        # Generate AI response
         q_lower = question.lower()
-        response = ""
-        
-        # GST Rates Response
-        if 'rate' in q_lower or 'gst on' in q_lower or 'what is gst' in q_lower:
-            if 'electronic' in q_lower or 'laptop' in q_lower or 'phone' in q_lower:
-                response = """**📱 Electronics GST Rate: 18%**
-                
-This includes:
-• Laptops & Computers
-• Smartphones & Tablets
-• Televisions & Monitors
-• Headphones & Speakers
-• Cameras & Accessories
-
-**Formula:** GST = Amount × 18%"""
-            
-            elif 'cloth' in q_lower or 'shirt' in q_lower or 'jeans' in q_lower:
-                response = """**👕 Clothing GST Rate: 12%**
-                
-This includes:
-• T-Shirts & Shirts
-• Jeans & Trousers
-• Dresses & Skirts
-• Jackets & Sweaters
-• Traditional Wear
-
-**Formula:** GST = Amount × 12%"""
-            
-            elif 'footwear' in q_lower or 'shoe' in q_lower:
-                response = """**👟 Footwear GST Rate: 12%**
-                
-This includes:
-• Sports Shoes
-• Casual Shoes
-• Formal Shoes
-• Sandals & Slippers
-• Boots
-
-**Formula:** GST = Amount × 12%"""
-            
-            elif 'book' in q_lower:
-                response = """**📚 Books GST Rate: 5%**
-                
-This includes:
-• Textbooks
-• Novels & Fiction
-• Reference Books
-• Children's Books
-• Stationery Items
-
-**Formula:** GST = Amount × 5%"""
-            
-            elif 'grocery' in q_lower or 'rice' in q_lower or 'oil' in q_lower:
-                response = """**🛒 Groceries GST Rate: 5%**
-                
-This includes:
-• Rice & Wheat
-• Cooking Oils
-• Pulses & Spices
-• Tea & Coffee
-• Sugar & Salt
-
-**Formula:** GST = Amount × 5%"""
-            
-            elif 'jewelry' in q_lower or 'gold' in q_lower or 'silver' in q_lower:
-                response = """**💍 Jewelry GST Rate: 3%**
-                
-This includes:
-• Gold Chains & Rings
-• Silver Jewelry
-• Diamond Earrings
-• Platinum Items
-• Precious Stones
-
-**Formula:** GST = Amount × 3%"""
-            
-            else:
-                response = """**📊 Complete GST Rate Guide:**
-
-| Category | GST Rate |
-|----------|----------|
-| Jewelry | 3% |
-| Books, Groceries, Essentials | 5% |
-| Clothing, Footwear, Toys | 12% |
-| Electronics, Appliances, Furniture | 18% |
-| Luxury Items | 28% |
-
-**Formula:** GST Amount = (Original Amount × GST Rate) ÷ 100
-**Total** = Original Amount + GST Amount"""
-        
-        # Calculation Response
-        elif 'calculate' in q_lower or 'formula' in q_lower:
-            response = """**🧮 GST Calculation Formula:**
-
-**Step-by-Step:**
-1. **GST Amount** = (Original Amount × GST Rate) ÷ 100
-2. **Total Amount** = Original Amount + GST Amount
-
-**Example:**
-- Original Amount: ₹10,000
-- GST Rate: 18%
-- GST Amount = (10,000 × 18) ÷ 100 = ₹1,800
-- Total Amount = ₹10,000 + ₹1,800 = ₹11,800
-
-**Quick Calculator:** Use the "Calculator" tab above to calculate instantly!"""
-        
-        # Invoice Response
-        elif 'invoice' in q_lower:
-            response = """**📄 How to Generate an Invoice:**
-
-1. **Add Products:** Search and add products from the "Products" tab
-2. **View Cart:** Go to "Cart" tab to see all items
-3. **Check Totals:** Verify subtotal, GST, and grand total
-4. **Generate:** Click "Generate Invoice" button
-5. **Download:** Click "Download PDF Invoice"
-
-Your invoice will be saved in the database and available for future reference!"""
-        
-        # GST Returns Response
-        elif 'return' in q_lower or 'file' in q_lower:
-            response = """**🧾 GST Return Filing Guide:**
-
-**GSTR-3B Monthly Return:**
-1. Go to "GST Returns" tab
-2. View monthly summary
-3. Check total sales and GST collected
-4. Review GSTR-3B format
-5. Download return report
-
-**Important Dates:**
-- Monthly returns due by 20th of next month
-- Quarterly returns for small taxpayers
-
-Need help? Visit the GST portal at www.gst.gov.in"""
-        
-        # Product Response
-        elif 'product' in q_lower:
-            response = """**🔍 Product Information:**
-
-We have **500+ products** across 13 categories:
-
-• **Electronics** - Laptops, Phones, TVs (18% GST)
-• **Clothing** - Shirts, Jeans, Dresses (12% GST)
-• **Footwear** - Shoes, Sandals (12% GST)
-• **Books** - Textbooks, Novels (5% GST)
-• **Groceries** - Rice, Oil, Spices (5% GST)
-• **Jewelry** - Gold, Silver (3% GST)
-• **Appliances** - Fridge, AC, Microwave (18% GST)
-• **Furniture** - Sofa, Bed, Chair (18% GST)
-
-Search any product in the "Products" tab!"""
-        
-        # Dashboard Response
-        elif 'dashboard' in q_lower:
-            response = """**📊 Analytics Dashboard Features:**
-
-The dashboard provides:
-• **Sales Trends** - Line chart showing daily sales
-• **GST Distribution** - Bar chart of GST collected
-• **Transaction History** - Recent invoices
-• **Total Sales & GST** - Summary metrics
-• **Transaction Count** - Number of invoices
-
-Go to the "Dashboard" tab to see your analytics!"""
-        
-        # Default Response
+        if 'exclusive' in q_lower:
+            response = "**Exclusive GST:** GST is added on top of the base price.\n\nFormula: Total = Base Price + (Base Price × GST%)\nExample: ₹1000 + 18% GST = ₹1000 + ₹180 = ₹1180"
+        elif 'inclusive' in q_lower:
+            response = "**Inclusive GST:** GST is included in the price.\n\nFormula: Base Price = Total Price × 100 / (100 + GST%)\nExample: ₹1180 includes 18% GST = ₹1000 base + ₹180 GST"
+        elif 'electronic' in q_lower:
+            response = "Electronics have 18% GST rate."
+        elif 'clothing' in q_lower:
+            response = "Clothing has 12% GST rate."
         else:
-            response = """**💡 I can help you with:**
-
-• **GST Rates** - Ask "What is GST on electronics?"
-• **Calculations** - Ask "How to calculate GST?"
-• **Invoices** - Ask "How to generate invoice?"
-• **Products** - Ask "What products are available?"
-• **Returns** - Ask "How to file GST returns?"
-• **Dashboard** - Ask "What's in the dashboard?"
-
-Try one of these questions or use the quick buttons above!"""
+            response = "I can help with:\n• Exclusive GST (GST added)\n• Inclusive GST (GST included)\n• GST rates\n• Calculation formulas"
         
-        # Add AI response
         st.session_state.chat_history.append({'role': 'assistant', 'content': response})
-        
-        # Rerun to update display
         st.rerun()
     
-    # Clear chat button
-    if st.button("🗑️ Clear Chat History", use_container_width=True):
-        st.session_state.chat_history = [
-            {'role': 'assistant', 'content': "Hello! I'm your AI GST Assistant. I can help you with:\n\n• GST rates for different products\n• GST calculation formulas\n• How to generate invoices\n• Product information\n• GST return filing\n\nWhat would you like to know?"}
-        ]
+    if st.button("Clear Chat", use_container_width=True):
+        st.session_state.chat_history = []
         st.rerun()
     
-    st.markdown("</div>", unsafe_allow_html=True)
+    st.markdown('</div>', unsafe_allow_html=True)
 
-# Direct Calculator Function
+# Direct Calculator with Both GST Types
 def direct_calculator():
     st.markdown('<div class="gst-card">', unsafe_allow_html=True)
-    st.subheader("💰 Quick GST Calculator")
+    st.subheader("💰 GST Calculator - Exclusive & Inclusive")
     
     col1, col2 = st.columns(2)
     
     with col1:
-        amount = st.number_input("Enter Amount (INR)", min_value=0.0, value=1000.0, step=100.0, format="%.2f")
+        amount = st.number_input("Enter Amount (₹)", min_value=0.0, value=1000.0, step=100.0, format="%.2f")
     
     with col2:
-        gst_rate = st.selectbox("Select GST Rate (%)", [0, 3, 5, 12, 18, 28], index=4)
+        gst_rate = st.selectbox("GST Rate (%)", [0, 3, 5, 12, 18, 28], index=4)
+    
+    # GST Type Selection
+    calc_type = st.radio(
+        "Select Calculation Type",
+        ["Exclusive (GST added to price)", "Inclusive (GST included in price)"],
+        horizontal=True,
+        help="Exclusive: GST is added on top. Inclusive: GST is already included in the price."
+    )
     
     if amount > 0:
-        gst_amount, total_amount = calc_gst(amount, gst_rate)
-        
-        st.markdown('<div class="result-box">', unsafe_allow_html=True)
-        st.markdown(f'<div class="amount-large">₹{total_amount:,.2f}</div>', unsafe_allow_html=True)
-        st.markdown(f'<p style="font-size: 18px; color: white;">GST Amount: ₹{gst_amount:,.2f} ({gst_rate}%)</p>', unsafe_allow_html=True)
-        st.markdown('</div>', unsafe_allow_html=True)
-        
-        if st.button("➕ Add to Cart", use_container_width=True):
-            if 'cart' not in st.session_state:
-                st.session_state.cart = []
+        if calc_type == "Exclusive (GST added to price)":
+            gst_amount, total = calc_gst_exclusive(amount, gst_rate)
             
-            st.session_state.cart.append({
-                'name': f"Custom ({gst_rate}% GST)",
-                'amount': amount,
-                'gst_rate': gst_rate,
-                'gst': gst_amount,
-                'total': total_amount
-            })
-            st.success(f"✅ Added ₹{total_amount:,.2f} to cart!")
-            st.rerun()
+            st.markdown('<div class="result-box">', unsafe_allow_html=True)
+            st.markdown(f'<div class="amount-large">₹{total:,.2f}</div>', unsafe_allow_html=True)
+            st.markdown(f'<p style="color:white;">Base Price: ₹{amount:,.2f} | GST ({gst_rate}%): ₹{gst_amount:,.2f}</p>', unsafe_allow_html=True)
+            st.markdown('</div>', unsafe_allow_html=True)
+            
+            st.info(f"📊 **Formula:** ₹{amount:,.2f} + ({amount:,.2f} × {gst_rate}%) = ₹{total:,.2f}")
+            
+            if st.button("➕ Add to Cart", use_container_width=True):
+                if 'cart' not in st.session_state:
+                    st.session_state.cart = []
+                st.session_state.cart.append({
+                    'name': f"Exclusive {gst_rate}% GST",
+                    'amount': amount,
+                    'gst_rate': gst_rate,
+                    'gst': gst_amount,
+                    'total': total,
+                    'calc_type': 'Exclusive'
+                })
+                st.success(f"✅ Added ₹{total:,.2f} to cart!")
+                st.rerun()
+        
+        else:  # Inclusive GST
+            gst_amount, base_price = calc_gst_inclusive(amount, gst_rate)
+            
+            st.markdown('<div class="result-box">', unsafe_allow_html=True)
+            st.markdown(f'<div class="amount-large">₹{amount:,.2f}</div>', unsafe_allow_html=True)
+            st.markdown(f'<p style="color:white;">Base Price: ₹{base_price:,.2f} | GST ({gst_rate}%): ₹{gst_amount:,.2f}</p>', unsafe_allow_html=True)
+            st.markdown('</div>', unsafe_allow_html=True)
+            
+            st.info(f"📊 **Formula:** Base Price = ₹{amount:,.2f} × 100 / (100 + {gst_rate}%) = ₹{base_price:,.2f}")
+            
+            if st.button("➕ Add to Cart", use_container_width=True):
+                if 'cart' not in st.session_state:
+                    st.session_state.cart = []
+                st.session_state.cart.append({
+                    'name': f"Inclusive {gst_rate}% GST",
+                    'amount': base_price,
+                    'gst_rate': gst_rate,
+                    'gst': gst_amount,
+                    'total': amount,
+                    'calc_type': 'Inclusive'
+                })
+                st.success(f"✅ Added ₹{amount:,.2f} to cart!")
+                st.rerun()
     
     st.markdown('</div>', unsafe_allow_html=True)
 
 # Login
 def login():
     st.markdown('<div class="main-title">🚀 Ultimate GST Suite</div>', unsafe_allow_html=True)
-    st.markdown("<p style='text-align:center; color:#FFD700; font-size: 18px;'>AI-Powered | 500+ Products | Smart Analytics</p>", unsafe_allow_html=True)
+    st.markdown("<p style='text-align:center; color:#FFD700;'>Exclusive & Inclusive GST Calculator | 500+ Products</p>", unsafe_allow_html=True)
     
     col1, col2, col3 = st.columns([1, 2, 1])
     with col2:
@@ -830,14 +600,14 @@ def main():
     
     st.markdown("---")
     
-    # Tabs - AI Assistant first
+    # Tabs
     tabs = st.tabs(["🤖 AI Assistant", "💰 Calculator", "🔍 Products", "🛒 Cart", "📊 Dashboard", "🧾 GST Returns"])
     
     # Tab 0: AI Assistant
     with tabs[0]:
         ai_assistant()
     
-    # Tab 1: Direct Calculator
+    # Tab 1: Calculator with Both GST Types
     with tabs[1]:
         direct_calculator()
     
@@ -861,12 +631,12 @@ def main():
                         with col2:
                             st.write(f"₹{p[3]:,.2f}")
                         with col3:
-                            st.markdown(f'<span style="background:#FFD700; color:#1a1f3a; padding:4px 12px; border-radius:20px; font-weight:bold;">{p[4]}% GST</span>', unsafe_allow_html=True)
+                            st.markdown(f'<span style="background:#FFD700; color:#1a1f3a; padding:4px 12px; border-radius:20px;">{p[4]}% GST</span>', unsafe_allow_html=True)
                         with col4:
                             qty = st.number_input("Qty", 1, min(10, p[5]), 1, key=f"qty_{p[0]}", label_visibility="collapsed")
                         with col5:
                             if st.button(f"➕ Add", key=f"add_{p[0]}"):
-                                gst_amt, total = calc_gst(p[3] * qty, p[4])
+                                gst_amt, total = calc_gst_exclusive(p[3] * qty, p[4])
                                 st.session_state.cart.append({
                                     'name': f"{p[1]} x{qty}",
                                     'amount': p[3] * qty,
@@ -880,7 +650,7 @@ def main():
             else:
                 st.warning("No products found")
         else:
-            st.info("🔍 Type a product name to search (e.g., Laptop, Shirt, Book)")
+            st.info("🔍 Type a product name to search")
         st.markdown('</div>', unsafe_allow_html=True)
     
     # Tab 3: Cart
@@ -949,7 +719,6 @@ def main():
                         use_container_width=True
                     )
                     
-                    # Save to database
                     conn = sqlite3.connect('ultimate_gst.db')
                     c = conn.cursor()
                     c.execute("INSERT INTO transactions (invoice_no, user_id, items, subtotal, total_gst, grand_total, transaction_date) VALUES (?,?,?,?,?,?,?)",
@@ -971,7 +740,7 @@ def main():
         transactions = pd.read_sql_query("SELECT * FROM transactions WHERE user_id = ?", conn, params=(st.session_state.user_id,))
         
         if transactions.empty:
-            st.info("No transactions yet. Generate some invoices to see analytics!")
+            st.info("No transactions yet. Generate some invoices!")
         else:
             total_sales = transactions['grand_total'].sum()
             total_gst = transactions['total_gst'].sum()
@@ -983,17 +752,14 @@ def main():
             
             st.markdown("---")
             
-            # Sales trend
             transactions['date'] = pd.to_datetime(transactions['transaction_date']).dt.date
             daily_sales = transactions.groupby('date')['grand_total'].sum().reset_index()
             
             if not daily_sales.empty:
                 fig = px.line(daily_sales, x='date', y='grand_total', title="Sales Trend")
-                fig.update_layout(template="plotly_dark", title_font_color="#FFD700", font_color="#FFFFFF")
+                fig.update_layout(template="plotly_dark", title_font_color="#FFD700")
                 st.plotly_chart(fig, use_container_width=True)
             
-            # Recent transactions
-            st.subheader("Recent Transactions")
             recent = transactions.sort_values('transaction_date', ascending=False).head(10)
             st.dataframe(recent[['invoice_no', 'grand_total', 'transaction_date']], use_container_width=True)
         
@@ -1029,18 +795,8 @@ def main():
             st.markdown("### GSTR-3B Summary")
             
             gst_data = {
-                "Particulars": [
-                    "Outward Taxable Supplies",
-                    "Outward Taxable Supplies (Others)",
-                    "ITC on Inward Supplies",
-                    "Net Tax Liability"
-                ],
-                "Value (₹)": [
-                    total_sales,
-                    0,
-                    total_gst * 0.8,
-                    total_gst
-                ]
+                "Particulars": ["Outward Taxable Supplies", "ITC on Inward Supplies", "Net Tax Liability"],
+                "Value (₹)": [total_sales, total_gst * 0.8, total_gst]
             }
             
             df_gst = pd.DataFrame(gst_data)
@@ -1053,40 +809,23 @@ def main():
         st.markdown(f"### 👋 Welcome, {st.session_state.username}!")
         st.markdown("---")
         
-        st.markdown("### 💡 GST Rates")
+        st.markdown("### 💡 GST Types")
         st.info("""
-        **India GST Slabs:**
-        - **3%** - Gold, Silver jewelry
-        - **5%** - Essentials, Books, Groceries
-        - **12%** - Clothing, Footwear, Toys
-        - **18%** - Electronics, Appliances
-        - **28%** - Luxury items
+        **Exclusive GST:**
+        - GST added on top
+        - Total = Base + GST
+        - Example: ₹1000 + 18% = ₹1180
+        
+        **Inclusive GST:**
+        - GST included in price
+        - Base = Total - GST
+        - Example: ₹1180 includes ₹180 GST
         """)
         
         st.markdown("---")
-        st.markdown("### 🤖 AI Assistant Tips")
-        st.info("""
-        **Try asking:**
-        • "What is GST on electronics?"
-        • "How to calculate GST?"
-        • "How to generate invoice?"
-        • "What products are available?"
-        • "How to file GST returns?"
-        """)
+        st.markdown("### 📊 GST Rates")
+        st.info("3% - Jewelry\n5% - Books, Groceries\n12% - Clothing\n18% - Electronics\n28% - Luxury")
         
-        st.markdown("---")
-        st.markdown("### 🚀 Features")
-        st.success("""
-        ✅ **🤖 AI Assistant** - Ask GST questions
-        ✅ **💰 Quick Calculator** - Direct GST calc
-        ✅ **📦 500+ Products** - Search & add
-        ✅ **🛒 Shopping Cart** - Multiple items
-        ✅ **📄 PDF Invoices** - Downloadable
-        ✅ **📊 Dashboard** - Sales analytics
-        ✅ **🧾 GST Returns** - Monthly summary
-        """)
-        
-        st.markdown("---")
         if st.button("🚪 Logout", use_container_width=True):
             st.session_state.logged_in = False
             st.session_state.cart = []
