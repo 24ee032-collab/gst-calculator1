@@ -3,24 +3,13 @@ import pandas as pd
 import sqlite3
 import hashlib
 import random
-import smtplib
 import os
 from datetime import datetime
 from fpdf import FPDF
 import plotly.express as px
-from email.mime.text import MIMEText
-from email.mime.multipart import MIMEMultipart
 
-# ========== CONFIGURATION ==========
+# Page configuration
 st.set_page_config(page_title="Ultimate GST Suite", page_icon="🚀", layout="wide", initial_sidebar_state="expanded")
-
-# Email settings for OTP (replace with your credentials)
-EMAIL_CONFIG = {
-    "smtp_server": "smtp.gmail.com",
-    "smtp_port": 587,
-    "sender_email": "your_email@gmail.com",      # <-- REPLACE
-    "sender_password": "your_app_password"       # <-- REPLACE (use app-specific password)
-}
 
 # ========== CUSTOM CSS ==========
 st.markdown("""
@@ -53,28 +42,37 @@ st.markdown("""
 def init_db():
     conn = sqlite3.connect('ultimate_gst.db')
     c = conn.cursor()
+    
+    # Users table
     c.execute('''CREATE TABLE IF NOT EXISTS users 
                  (id INTEGER PRIMARY KEY, username TEXT UNIQUE, password TEXT, 
-                  email TEXT UNIQUE, phone TEXT, created_date TEXT, verified INTEGER DEFAULT 0)''')
+                  email TEXT UNIQUE, phone TEXT, created_date TEXT)''')
+    
+    # Products table
     c.execute('''CREATE TABLE IF NOT EXISTS products 
                  (id INTEGER PRIMARY KEY, name TEXT, category TEXT, 
                   price REAL, stock INTEGER, gst INTEGER)''')
+    
+    # Transactions table
     c.execute('''CREATE TABLE IF NOT EXISTS transactions 
                  (id INTEGER PRIMARY KEY AUTOINCREMENT,
                   invoice_no TEXT, user_id INTEGER, product_id INTEGER, product_name TEXT,
                   quantity INTEGER, price REAL, gst_rate INTEGER, gst_amount REAL, total REAL,
                   transaction_date TEXT)''')
-    c.execute('''CREATE TABLE IF NOT EXISTS otp_codes 
-                 (email TEXT PRIMARY KEY, otp TEXT, expiry REAL)''')
+    
+    # Add admin if not exists
     c.execute("SELECT COUNT(*) FROM users WHERE username='admin'")
     if c.fetchone()[0] == 0:
         pwd = hashlib.sha256("admin123".encode()).hexdigest()
-        c.execute("INSERT INTO users (username, password, email, phone, created_date, verified) VALUES (?,?,?,?,?,?)",
-                  ("admin", pwd, "admin@example.com", "+919876543210", datetime.now().isoformat(), 1))
+        c.execute("INSERT INTO users (username, password, email, phone, created_date) VALUES (?,?,?,?,?)",
+                  ("admin", pwd, "admin@example.com", "+919876543210", datetime.now().isoformat()))
+    
+    # Add 1000+ products if not exists
     c.execute("SELECT COUNT(*) FROM products")
     if c.fetchone()[0] == 0:
         products = generate_products()
         c.executemany("INSERT INTO products (id, name, category, price, stock, gst) VALUES (?,?,?,?,?,?)", products)
+    
     conn.commit()
     conn.close()
 
@@ -156,45 +154,6 @@ def get_user_transactions(user_id):
     df = pd.read_sql_query("SELECT * FROM transactions WHERE user_id=? ORDER BY transaction_date DESC", conn, params=(user_id,))
     conn.close()
     return df
-
-def store_otp(email, otp):
-    conn = sqlite3.connect('ultimate_gst.db')
-    c = conn.cursor()
-    expiry = datetime.now().timestamp() + 600  # 10 minutes
-    c.execute("REPLACE INTO otp_codes (email, otp, expiry) VALUES (?,?,?)", (email, otp, expiry))
-    conn.commit()
-    conn.close()
-
-def verify_otp(email, otp):
-    conn = sqlite3.connect('ultimate_gst.db')
-    c = conn.cursor()
-    c.execute("SELECT otp, expiry FROM otp_codes WHERE email=?", (email,))
-    row = c.fetchone()
-    conn.close()
-    if row and row[0] == otp and datetime.now().timestamp() <= row[1]:
-        return True
-    return False
-
-def send_email_otp(email, otp):
-    """Send OTP via email. Returns True if sent successfully."""
-    try:
-        msg = MIMEMultipart()
-        msg['From'] = EMAIL_CONFIG["sender_email"]
-        msg['To'] = email
-        msg['Subject'] = "GST Suite - OTP Verification"
-        body = f"Your OTP for registration is: {otp}\nThis OTP is valid for 10 minutes."
-        msg.attach(MIMEText(body, 'plain'))
-        server = smtplib.SMTP(EMAIL_CONFIG["smtp_server"], EMAIL_CONFIG["smtp_port"])
-        server.starttls()
-        server.login(EMAIL_CONFIG["sender_email"], EMAIL_CONFIG["sender_password"])
-        server.send_message(msg)
-        server.quit()
-        return True
-    except Exception as e:
-        st.error(f"Email sending failed: {str(e)}")
-        # Fallback: print to console (for debugging)
-        print(f"OTP for {email}: {otp}")
-        return False
 
 # ========== GST CALCULATION ==========
 def calc_gst_exclusive(amount, rate):
@@ -488,17 +447,15 @@ def login():
                 conn = sqlite3.connect('ultimate_gst.db')
                 c = conn.cursor()
                 pwd_hash = hashlib.sha256(password.encode()).hexdigest()
-                c.execute("SELECT id, username, verified FROM users WHERE username=? AND password=?", (username, pwd_hash))
+                c.execute("SELECT id, username FROM users WHERE username=? AND password=?", (username, pwd_hash))
                 user = c.fetchone()
                 conn.close()
-                if user and user[2] == 1:
+                if user:
                     st.session_state.logged_in = True
                     st.session_state.user_id = user[0]
                     st.session_state.username = user[1]
                     st.success(f"🎉 Welcome {username}!")
                     st.rerun()
-                elif user and user[2] == 0:
-                    st.error("❌ Account not verified. Please verify your email.")
                 else:
                     st.error("❌ Invalid credentials! Use admin/admin123")
         with tab2:
@@ -507,55 +464,21 @@ def login():
             new_phone = st.text_input("Phone", key="reg_phone")
             new_pass = st.text_input("Password", type="password", key="reg_pass")
             confirm_pass = st.text_input("Confirm Password", type="password", key="reg_confirm")
-            if 'otp_sent' not in st.session_state:
-                st.session_state.otp_sent = False
-                st.session_state.pending_email = None
-            if not st.session_state.otp_sent:
-                if st.button("Send OTP", use_container_width=True):
-                    if new_user and new_email and new_phone and new_pass and new_pass == confirm_pass:
-                        conn = sqlite3.connect('ultimate_gst.db')
-                        c = conn.cursor()
-                        c.execute("SELECT * FROM users WHERE username=? OR email=?", (new_user, new_email))
-                        if c.fetchone():
-                            st.error("❌ Username or email already exists!")
-                        else:
-                            otp = str(random.randint(100000, 999999))
-                            if send_email_otp(new_email, otp):
-                                store_otp(new_email, otp)
-                                st.session_state.otp_sent = True
-                                st.session_state.pending_email = new_email
-                                st.session_state.pending_username = new_user
-                                st.session_state.pending_phone = new_phone
-                                st.session_state.pending_password = new_pass
-                                st.success("✅ OTP sent to your email. Please enter it below.")
-                                st.rerun()
-                            else:
-                                st.error("❌ Failed to send OTP. Check email settings.")
-                    else:
-                        st.error("❌ Fill all fields correctly and ensure passwords match.")
-            else:
-                otp = st.text_input("Enter OTP sent to your email", type="password")
-                if st.button("Verify OTP & Register", use_container_width=True):
-                    if verify_otp(st.session_state.pending_email, otp):
-                        conn = sqlite3.connect('ultimate_gst.db')
-                        c = conn.cursor()
-                        pwd_hash = hashlib.sha256(st.session_state.pending_password.encode()).hexdigest()
-                        c.execute("INSERT INTO users (username, password, email, phone, created_date, verified) VALUES (?,?,?,?,?,?)",
-                                  (st.session_state.pending_username, pwd_hash, st.session_state.pending_email, st.session_state.pending_phone, datetime.now().isoformat(), 1))
+            if st.button("Register", use_container_width=True):
+                if new_user and new_email and new_phone and new_pass and new_pass == confirm_pass:
+                    conn = sqlite3.connect('ultimate_gst.db')
+                    c = conn.cursor()
+                    try:
+                        pwd_hash = hashlib.sha256(new_pass.encode()).hexdigest()
+                        c.execute("INSERT INTO users (username, password, email, phone, created_date) VALUES (?,?,?,?,?)",
+                                  (new_user, pwd_hash, new_email, new_phone, datetime.now().isoformat()))
                         conn.commit()
+                        st.success("✅ Account created! Please login.")
                         conn.close()
-                        st.success("✅ Registration successful! Please login.")
-                        st.session_state.otp_sent = False
-                        st.rerun()
-                    else:
-                        st.error("❌ Invalid or expired OTP.")
-                if st.button("Resend OTP", use_container_width=True):
-                    otp = str(random.randint(100000, 999999))
-                    if send_email_otp(st.session_state.pending_email, otp):
-                        store_otp(st.session_state.pending_email, otp)
-                        st.success("✅ New OTP sent.")
-                    else:
-                        st.error("❌ Failed to send OTP.")
+                    except sqlite3.IntegrityError:
+                        st.error("❌ Username or email already exists!")
+                else:
+                    st.error("❌ Fill all fields correctly and ensure passwords match.")
         st.markdown("---")
         st.info("💡 **Demo Account:** admin / admin123")
         st.markdown('</div>', unsafe_allow_html=True)
@@ -690,7 +613,6 @@ def main():
         ✅ **📦 1000+ Products** - Search & view details
         ✅ **📄 PDF Invoices** - Downloadable
         ✅ **🧾 GST Returns** - Monthly summary
-        ✅ **📧 OTP Verification** - Secure registration
         """)
         st.markdown("---")
         if st.button("🚪 Logout", use_container_width=True):
